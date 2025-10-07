@@ -2,119 +2,52 @@ name: Calendar Summary (Prague 20:00)
 
 on:
   schedule:
-    - cron: '0 * * * *'          # běží každou hodinu; spouštíme jen ve 20:00 Europe/Prague
-  workflow_dispatch:             # ruční spuštění kdykoliv
+    - cron: '0 * * * *'           # běží každou hodinu (spouštíme jen ve 20:00)
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Run mode"
+        required: true
+        default: "daily"
+        type: choice
+        options:
+          - daily
+          - weekly
+          - both
 
 jobs:
   calendar:
     runs-on: ubuntu-latest
-    env:
-      # Secrets
-      SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
-      SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
-      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-      SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
-      SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
-      CALENDARS_JSON: ${{ secrets.CALENDARS_JSON }}
-      # Variables (fallback na defaulty)
-      SMTP_FROM: ${{ vars.SMTP_FROM }}
-      SMTP_TO: ${{ vars.SMTP_TO }}
-      SMTP_SERVER: ${{ vars.SMTP_SERVER }}
-      SMTP_PORT: ${{ vars.SMTP_PORT }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
       - name: Install deps
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          # pro jistotu sjednotíme verze ICS knihoven
           pip install "recurring-ical-events==2.1.2" "icalendar==5.0.12"
 
+      # výpočet 20:00 Europe/Prague
       - name: Decide if we should run now (Europe/Prague 20:00)
         id: when
         run: |
           python - <<'PY'
-          import os, sys, json
+          import os
           from datetime import datetime
-          try:
-              import pytz
-          except:
-              print("::set-output name=daily::false")
-              print("::set-output name=weekly::false")
-              sys.exit(0)
+          import pytz
           tz = pytz.timezone("Europe/Prague")
           now = datetime.now(tz)
           is_20 = now.hour == 20
-          is_sun = now.weekday() == 6  # Monday=0 .. Sunday=6
-          print(f"Local Prague time: {now.isoformat()}")
-          print(f"Run daily? {is_20}")
-          print(f"Run weekly? {is_20 and is_sun}")
-          # GitHub recommends GITHUB_OUTPUT over set-output
+          is_sun = now.weekday() == 6
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
               f.write(f"daily={'true' if is_20 else 'false'}\n")
               f.write(f"weekly={'true' if (is_20 and is_sun) else 'false'}\n")
+          print("Prague now:", now)
           PY
 
       - name: Build config.yaml from Secrets/Variables
         run: |
-          python - <<'PY'
-          import os, yaml, json, sys
-          cfg = {
-            "time_zone": "Europe/Prague",
-            "dry_run": False,  # v Actions posíláme naostro
-            "calendars": [],
-            "intro_text_daily": "Níže je zítřejší plán z našich kalendářů.",
-            "intro_text_weekly": "Tady je plán na příští týden (po–ne).",
-            "smtp": {
-              "from": os.getenv("SMTP_FROM") or os.getenv("SMTP_USERNAME"),
-              "to": [x.strip() for x in (os.getenv("SMTP_TO") or os.getenv("SMTP_USERNAME") or "").split(",") if x.strip()],
-              "server": os.getenv("SMTP_SERVER") or "smtp.gmail.com",
-              "port": int(os.getenv("SMTP_PORT") or "587"),
-              "username": os.getenv("SMTP_USERNAME"),
-              "password": os.getenv("SMTP_PASSWORD"),
-              "use_tls": True
-            },
-            "slack": {
-              "enabled": bool(os.getenv("SLACK_WEBHOOK_URL")),
-              "webhook_url": os.getenv("SLACK_WEBHOOK_URL") or ""
-            },
-            "slack_bot": {
-              "enabled": bool(os.getenv("SLACK_BOT_TOKEN") and os.getenv("SLACK_CHANNEL_ID")),
-              "token": os.getenv("SLACK_BOT_TOKEN") or "",
-              "channel_id": os.getenv("SLACK_CHANNEL_ID") or ""
-            }
-          }
-          cal_json = os.getenv("CALENDARS_JSON")
-          if not cal_json:
-              print("::error::Missing CALENDARS_JSON secret (array of {name, ics_url})")
-              sys.exit(1)
-          try:
-              items = json.loads(cal_json)
-              assert isinstance(items, list)
-              for it in items:
-                  if not it.get("name") or not it.get("ics_url"):
-                      continue
-                  # převeď webcal:// na https://
-                  url = it["ics_url"].replace("webcal://", "https://")
-                  cfg["calendars"].append({"name": it["name"], "ics_url": url})
-          except Exception as e:
-              print(f"::error::Invalid CALENDARS_JSON: {e}")
-              sys.exit(1)
-          with open("config.yaml", "w", encoding="utf-8") as f:
-              yaml.safe_dump(cfg, f, allow_unicode=True, sort_keys=False)
-          print("config.yaml written with", len(cfg["calendars"]), "calendars.")
-          PY
-
-      - name: Run daily
-        if: steps.when.outputs.daily == 'true'
-        run: python main.py --mode daily
-
-      - name: Run weekly (Sunday only)
-        if: steps.when.outputs.weekly == 'true'
-        run: python main.py --mode weekly
+          python .github/workflows/build_config.py
+        shell: bash
