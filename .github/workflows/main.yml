@@ -15,6 +15,7 @@ on:
 jobs:
   calendar:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
@@ -26,8 +27,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install "recurring-ical-events==2.1.2" "icalendar==5.0.12"
+          pip install "recurring-ical-events==2.1.2" "icalendar==5.0.12" "PyYAML==6.0.2"
 
+      # Rozhodnutí podle Europe/Prague 20:00 (pro schedule)
       - name: Decide if we should run now (Europe/Prague 20:00)
         id: when
         run: |
@@ -45,13 +47,14 @@ jobs:
               f.write(f"weekly={'true' if (is_20 and is_sun) else 'false'}\n")
           PY
 
-      - name: Build config.yaml from Secrets/Variables
+      # Vytvoř build_config.py (tady už se nemůže rozbít here-doc uvnitř Pythonu)
+      - name: Write build_config.py
         run: |
-          python - <<'PY'
+          cat > build_config.py <<'PY'
           import os, yaml, json, sys
           cfg = {
             "time_zone": "Europe/Prague",
-            "dry_run": False,
+            "dry_run": False,   # v Actions posíláme naostro
             "calendars": [],
             "intro_text_daily": "Níže je zítřejší plán z našich kalendářů.",
             "intro_text_weekly": "Tady je plán na příští týden (po–ne).",
@@ -89,4 +92,22 @@ jobs:
           except Exception as e:
               print(f"::error::Invalid CALENDARS_JSON: {e}")
               sys.exit(1)
-          with open("confi
+          with open("config.yaml", "w", encoding="utf-8") as f:
+              yaml.safe_dump(cfg, f, allow_unicode=True, sort_keys=False)
+          print("config.yaml written with", len(cfg["calendars"]), "calendars.")
+          PY
+
+      - name: Build config.yaml from Secrets/Variables
+        run: python build_config.py
+
+      - name: Run daily
+        if: |
+          (github.event_name == 'workflow_dispatch' && (github.event.inputs.mode == 'daily' || github.event.inputs.mode == 'both'))
+          || (github.event_name == 'schedule' && steps.when.outputs.daily == 'true')
+        run: python main.py --mode daily
+
+      - name: Run weekly (Sunday only)
+        if: |
+          (github.event_name == 'workflow_dispatch' && (github.event.inputs.mode == 'weekly' || github.event.inputs.mode == 'both'))
+          || (github.event_name == 'schedule' && steps.when.outputs.weekly == 'true')
+        run: python main.py --mode weekly
