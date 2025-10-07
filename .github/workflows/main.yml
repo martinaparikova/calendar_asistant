@@ -16,18 +16,19 @@ jobs:
   calendar:
     runs-on: ubuntu-latest
     env:
-      # --- Secrets (citlivé) ---
       SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
       SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
       SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
       SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
       CALENDARS_JSON: ${{ secrets.CALENDARS_JSON }}
-      # --- Variables (nekritické; můžeš použít i Secrets) ---
-      SMTP_FROM: ${{ vars.SMTP_FROM }}
-      SMTP_TO: ${{ vars.SMTP_TO }}
-      SMTP_SERVER: ${{ vars.SMTP_SERVER }}
-      SMTP_PORT: ${{ vars.SMTP_PORT }}
+    
+      # preferuj Variables, ale když nejsou, vezmi Secrets (nebo nech prázdné)
+      SMTP_FROM: ${{ vars.SMTP_FROM || secrets.SMTP_FROM }}
+      SMTP_TO: ${{ vars.SMTP_TO || secrets.SMTP_TO }}
+      SMTP_SERVER: ${{ vars.SMTP_SERVER || 'smtp.gmail.com' }}
+      SMTP_PORT: ${{ vars.SMTP_PORT || '587' }}
+
 
     steps:
       - uses: actions/checkout@v4
