@@ -15,6 +15,19 @@ on:
 jobs:
   calendar:
     runs-on: ubuntu-latest
+    env:
+      # --- Secrets (citlivé) ---
+      SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+      SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+      SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
+      CALENDARS_JSON: ${{ secrets.CALENDARS_JSON }}
+      # --- Variables (nekritické; můžeš použít i Secrets) ---
+      SMTP_FROM: ${{ vars.SMTP_FROM }}
+      SMTP_TO: ${{ vars.SMTP_TO }}
+      SMTP_SERVER: ${{ vars.SMTP_SERVER }}
+      SMTP_PORT: ${{ vars.SMTP_PORT }}
 
     steps:
       - uses: actions/checkout@v4
@@ -29,7 +42,6 @@ jobs:
           pip install -r requirements.txt
           pip install "recurring-ical-events==2.1.2" "icalendar==5.0.12" "PyYAML==6.0.2"
 
-      # Rozhodnutí podle Europe/Prague 20:00 (pro schedule)
       - name: Decide if we should run now (Europe/Prague 20:00)
         id: when
         run: |
@@ -47,14 +59,13 @@ jobs:
               f.write(f"weekly={'true' if (is_20 and is_sun) else 'false'}\n")
           PY
 
-      # Vytvoř build_config.py (tady už se nemůže rozbít here-doc uvnitř Pythonu)
       - name: Write build_config.py
         run: |
           cat > build_config.py <<'PY'
           import os, yaml, json, sys
           cfg = {
             "time_zone": "Europe/Prague",
-            "dry_run": False,   # v Actions posíláme naostro
+            "dry_run": False,
             "calendars": [],
             "intro_text_daily": "Níže je zítřejší plán z našich kalendářů.",
             "intro_text_weekly": "Tady je plán na příští týden (po–ne).",
