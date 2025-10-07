@@ -1,0 +1,24 @@
+# Rename this file to config.yaml and fill in your values.
+time_zone: Europe/Prague
+dry_run: false   # set to true to write output_*.html locally instead of sending email
+
+# Optional intro paragraphs (HTML allowed)
+intro_text_daily: "Níže je zítřejší plán z našich kalendářů."
+intro_text_weekly: "Tady je plán na příští týden (po–ne)."
+
+# SMTP settings — easiest is an app password (Gmail/Outlook). You can also point to your own SMTP.
+smtp:
+  server: "smtp.gmail.com"
+  port: 587
+  use_tls: true
+
+# Slack – vyber jednu z variant; nastav enabled: true
+slack:
+  enabled: false
+  webhook_url: "https://hooks.slack.com/services/XXX/YYY/ZZZ"
+  # channel: "#rodina"  # volitelné; webhook většinou posílá do předvoleného kanálu
+
+slack_bot:
+  enabled: false
+  token: "xoxb-xxxxxxxx"
+  channel_id: "C0123ABCDE"
